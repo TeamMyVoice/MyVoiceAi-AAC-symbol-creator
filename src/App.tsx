@@ -142,14 +142,16 @@ export default function App() {
 
   // When embedded as an iframe in the main app, send the preview image + all icons to the parent
   const isEmbedded = window.self !== window.top;
+  const hasGeneratedIcons = icons.some(i => i.imageUrl);
   const handleSaveToParent = () => {
-    if (previewImage) {
-      const iconMap: Record<string, string> = {};
-      icons.forEach(icon => {
-        if (icon.imageUrl) iconMap[icon.actionId] = icon.imageUrl;
-      });
-      window.parent.postMessage({ imageDataUrl: previewImage, iconMap }, '*');
-    }
+    // Use preview image if available, otherwise fall back to the first generated icon
+    const imgSrc = previewImage ?? icons.find(i => i.imageUrl)?.imageUrl ?? null;
+    if (!imgSrc) return;
+    const iconMap: Record<string, string> = {};
+    icons.forEach(icon => {
+      if (icon.imageUrl) iconMap[icon.actionId] = icon.imageUrl;
+    });
+    window.parent.postMessage({ imageDataUrl: imgSrc, iconMap }, '*');
   };
 
   return (
@@ -171,7 +173,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center justify-end gap-4 w-1/3">
-              {isEmbedded && previewImage && (
+              {isEmbedded && (previewImage || hasGeneratedIcons) && (
                 <button
                   onClick={handleSaveToParent}
                   className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors"
