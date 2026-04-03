@@ -143,8 +143,8 @@ export default function App() {
   // When embedded as an iframe in the main app, send the preview image + all icons to the parent
   const isEmbedded = window.self !== window.top;
   const hasGeneratedIcons = icons.some(i => i.imageUrl);
-  const handleSaveToParent = () => {
-    // Use preview image if available, otherwise fall back to the first generated icon
+
+  const buildAndSendToParent = () => {
     const imgSrc = previewImage ?? icons.find(i => i.imageUrl)?.imageUrl ?? null;
     if (!imgSrc) return;
     const iconMap: Record<string, string> = {};
@@ -153,6 +153,20 @@ export default function App() {
     });
     window.parent.postMessage({ imageDataUrl: imgSrc, iconMap }, '*');
   };
+
+  const handleSaveToParent = buildAndSendToParent;
+
+  // Auto-send to parent once all icons finish generating (no manual click needed)
+  useEffect(() => {
+    if (!isEmbedded) return;
+    if (isGenerating) return;
+    if (icons.length === 0) return;
+    if (icons.some(i => i.isLoading)) return;
+    if (!icons.some(i => i.imageUrl)) return;
+    buildAndSendToParent();
+    // Only fire once per generation batch
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isGenerating]);
 
   return (
     <div className={`min-h-screen bg-gray-50 text-gray-900 font-sans ${lang === 'he' ? 'rtl' : 'ltr'}`} dir={lang === 'he' ? 'rtl' : 'ltr'}>
