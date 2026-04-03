@@ -1,0 +1,63 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // ===============================================================
+    // Assumed Data Model
+    // ===============================================================
+    //
+    // Collection: character_boards
+    // Document ID: [attributesHash]
+    // Fields:
+    //   - attributesHash: string (required) - A deterministic string of the character attributes
+    //   - attributes: map (required) - The character attributes
+    //   - icons: map (required) - Map of actionId to image URL
+    //   - createdAt: timestamp (required)
+    //   - updatedAt: timestamp (required)
+    //
+    // ===============================================================
+
+    // ===============================================================
+    // Helper Functions
+    // ===============================================================
+    
+    function isAuthenticated() {
+      return request.auth != null;
+    }
+
+    function hasRequiredFields(fields) {
+      return request.resource.data.keys().hasAll(fields);
+    }
+
+    function isValidCharacterBoard() {
+      let data = request.resource.data;
+      return hasRequiredFields(['attributesHash', 'attributes', 'icons', 'createdAt', 'updatedAt']) &&
+             data.attributesHash is string &&
+             data.attributes is map &&
+             data.icons is map &&
+             data.createdAt is timestamp &&
+             data.updatedAt is timestamp;
+    }
+
+    // ===============================================================
+    // Rules
+    // ===============================================================
+
+    match /character_boards/{boardId} {
+      // Any authenticated user can read the global character boards
+      allow read: if isAuthenticated();
+      
+      // Any authenticated user can create a new board
+      allow create: if isAuthenticated() && 
+                    isValidCharacterBoard() && 
+                    request.resource.data.attributesHash == boardId;
+                    
+      // Any authenticated user can update a board to add new icons
+      allow update: if isAuthenticated() && 
+                    isValidCharacterBoard() &&
+                    request.resource.data.attributesHash == resource.data.attributesHash &&
+                    request.resource.data.createdAt == resource.data.createdAt;
+    }
+  }
+}

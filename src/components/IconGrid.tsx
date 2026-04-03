@@ -3,6 +3,7 @@ import { GeneratedIcon } from '../types';
 import { Download, Loader2, AlertCircle } from 'lucide-react';
 import { translations, translateOption } from '../translations';
 import { Language } from '../App';
+import { CATEGORIZED_ACTIONS } from '../constants';
 
 interface IconGridProps {
   icons: GeneratedIcon[];
@@ -39,54 +40,69 @@ export function IconGrid({ icons, onRegenerate, lang }: IconGridProps) {
     );
   }
 
+  // Group icons by category
+  const groupedIcons = Object.entries(CATEGORIZED_ACTIONS).map(([categoryName, actions]) => {
+    const categoryIcons = actions.map(action => icons.find(i => i.actionId === action.id)).filter(Boolean) as GeneratedIcon[];
+    return { categoryName, categoryIcons };
+  }).filter(group => group.categoryIcons.length > 0);
+
   return (
-    <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
-      {icons.map((icon) => (
-        <div key={icon.id} className="group relative flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md">
-          <div className="relative aspect-square w-full bg-gray-50 flex items-center justify-center p-4">
-            {icon.isLoading ? (
-              <div className="flex flex-col items-center gap-3 text-purple-600">
-                <Loader2 className="h-8 w-8 animate-spin" />
-                <span className="text-xs font-medium text-gray-500">{t.generating}</span>
+    <div className="flex flex-col gap-8">
+      {groupedIcons.map(({ categoryName, categoryIcons }) => (
+        <div key={categoryName} className="flex flex-col gap-4">
+          <h3 className="text-xl font-bold text-gray-900 border-b border-gray-200 pb-2">
+            {t[categoryName as keyof typeof t] || categoryName}
+          </h3>
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-4 xl:grid-cols-5">
+            {categoryIcons.map((icon) => (
+              <div key={icon.id} className="group relative flex flex-col overflow-hidden rounded-xl border border-gray-200 bg-white shadow-sm transition-all hover:shadow-md">
+                <div className="relative aspect-square w-full bg-gray-50 flex items-center justify-center p-4">
+                  {icon.isLoading ? (
+                    <div className="flex flex-col items-center gap-3 text-purple-600">
+                      <Loader2 className="h-8 w-8 animate-spin" />
+                      <span className="text-xs font-medium text-gray-500">{t.generating}</span>
+                    </div>
+                  ) : icon.error ? (
+                    <div className="flex flex-col items-center gap-2 text-red-500 text-center p-4">
+                      <AlertCircle className="h-8 w-8" />
+                      <span className="text-xs font-medium">{icon.error}</span>
+                      <button 
+                        onClick={() => onRegenerate(icon.actionId)}
+                        className="mt-2 text-xs font-semibold text-purple-600 hover:text-purple-800 underline"
+                      >
+                        {t.retry}
+                      </button>
+                    </div>
+                  ) : icon.imageUrl ? (
+                    <img 
+                      src={icon.imageUrl} 
+                      alt={translateOption(icon.label, lang)} 
+                      className="h-full w-full object-contain"
+                      referrerPolicy="no-referrer"
+                    />
+                  ) : null}
+                  
+                  {/* Hover Actions */}
+                  {icon.imageUrl && !icon.isLoading && (
+                    <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
+                      <button
+                        onClick={() => handleDownload(icon)}
+                        className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-50"
+                      >
+                        <Download className="h-4 w-4" />
+                        {t.save}
+                      </button>
+                    </div>
+                  )}
+                </div>
+                
+                <div className="border-t border-gray-100 bg-white p-3 text-center">
+                  <span className="text-sm font-bold uppercase tracking-wider text-gray-900">
+                    {translateOption(icon.label, lang)}
+                  </span>
+                </div>
               </div>
-            ) : icon.error ? (
-              <div className="flex flex-col items-center gap-2 text-red-500 text-center p-4">
-                <AlertCircle className="h-8 w-8" />
-                <span className="text-xs font-medium">{icon.error}</span>
-                <button 
-                  onClick={() => onRegenerate(icon.actionId)}
-                  className="mt-2 text-xs font-semibold text-purple-600 hover:text-purple-800 underline"
-                >
-                  {t.retry}
-                </button>
-              </div>
-            ) : icon.imageUrl ? (
-              <img 
-                src={icon.imageUrl} 
-                alt={translateOption(icon.label, lang)} 
-                className="h-full w-full object-contain"
-                referrerPolicy="no-referrer"
-              />
-            ) : null}
-            
-            {/* Hover Actions */}
-            {icon.imageUrl && !icon.isLoading && (
-              <div className="absolute inset-0 flex items-center justify-center bg-black/40 opacity-0 transition-opacity group-hover:opacity-100">
-                <button
-                  onClick={() => handleDownload(icon)}
-                  className="flex items-center gap-2 rounded-full bg-white px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-50"
-                >
-                  <Download className="h-4 w-4" />
-                  {t.save}
-                </button>
-              </div>
-            )}
-          </div>
-          
-          <div className="border-t border-gray-100 bg-white p-3 text-center">
-            <span className="text-sm font-bold uppercase tracking-wider text-gray-900">
-              {translateOption(icon.label, lang)}
-            </span>
+            ))}
           </div>
         </div>
       ))}

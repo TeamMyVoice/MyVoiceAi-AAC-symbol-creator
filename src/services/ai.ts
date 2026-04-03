@@ -1,28 +1,21 @@
 import { GoogleGenAI } from "@google/genai";
 import { CharacterAttributes } from "../types";
 
-let aiInstance: GoogleGenAI | null = null;
-
-function getAI() {
-  if (!aiInstance) {
-    const apiKey = process.env.GEMINI_API_KEY;
-    if (!apiKey) {
-      throw new Error("GEMINI_API_KEY environment variable is required");
-    }
-    aiInstance = new GoogleGenAI({ apiKey });
-  }
-  return aiInstance;
-}
-
 export async function generateIconImage(attributes: CharacterAttributes, action: string): Promise<string> {
-  const ai = getAI();
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) {
+    throw new Error("GEMINI_API_KEY environment variable is required");
+  }
+  
+  // Create a new instance right before making an API call to ensure it uses the most up-to-date key
+  const ai = new GoogleGenAI({ apiKey });
   
   const hairDesc = attributes.hairLength === 'Bald' ? 'bald head' : `${attributes.hairLength} ${attributes.hairColor} hair`;
   
   const prompt = `A high-quality AAC symbol icon of a ${attributes.age} ${attributes.gender} with a ${attributes.bodySize.toLowerCase()} body type, ${attributes.skinColor} skin, ${hairDesc}, ${attributes.eyeColor} eyes, wearing a ${attributes.clothesColor} shirt. The character is ${action}. Style of minimalistic flat vector illustration style, thick clean outlines, simple solid colors, centered on a plain white background, isolated, professional clinical look, no shading or gradients, high contrast, symbol stix style.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-2.5-flash-image',
+    model: 'gemini-3.1-flash-image-preview',
     contents: {
       parts: [
         {
@@ -30,6 +23,12 @@ export async function generateIconImage(attributes: CharacterAttributes, action:
         },
       ],
     },
+    config: {
+      imageConfig: {
+        aspectRatio: "1:1",
+        imageSize: "1K"
+      }
+    }
   });
 
   if (!response.candidates || response.candidates.length === 0) {

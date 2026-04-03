@@ -24,7 +24,11 @@ export const translations = {
     clothesColor: "Clothes Color",
     rateLimit: "Rate limit exceeded. Please wait.",
     previewError: "Preview failed",
-    updatePreview: "Update Preview"
+    updatePreview: "Update Preview",
+    downloadAll: "Download All (ZIP)",
+    Emotions: "Emotions",
+    Communication: "Communication",
+    Activities: "Activities"
   },
   he: {
     mainTitle: "קול עולמי",
@@ -51,7 +55,11 @@ export const translations = {
     clothesColor: "צבע בגדים",
     rateLimit: "חריגה ממגבלת הקצב. אנא המתן.",
     previewError: "התצוגה המקדימה נכשלה",
-    updatePreview: "עדכן תצוגה מקדימה"
+    updatePreview: "עדכן תצוגה מקדימה",
+    downloadAll: "הורד הכל (ZIP)",
+    Emotions: "רגשות",
+    Communication: "תקשורת",
+    Activities: "פעילויות"
   }
 };
 

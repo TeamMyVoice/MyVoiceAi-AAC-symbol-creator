@@ -1,0 +1,38 @@
+{
+  "entities": {
+    "CharacterBoard": {
+      "title": "CharacterBoard",
+      "description": "A generated board of AAC icons for a specific character configuration.",
+      "type": "object",
+      "properties": {
+        "attributesHash": {
+          "type": "string",
+          "description": "A deterministic string of the character attributes."
+        },
+        "attributes": {
+          "type": "object",
+          "description": "The character attributes used to generate this board."
+        },
+        "icons": {
+          "type": "object",
+          "description": "A map of actionId to the generated image URL."
+        },
+        "createdAt": {
+          "type": "string",
+          "format": "date-time"
+        },
+        "updatedAt": {
+          "type": "string",
+          "format": "date-time"
+        }
+      },
+      "required": ["attributesHash", "attributes", "icons", "createdAt", "updatedAt"]
+    }
+  },
+  "firestore": {
+    "/character_boards/{boardId}": {
+      "schema": "CharacterBoard",
+      "description": "Stores generated AAC boards keyed by their attributes hash."
+    }
+  }
+}
