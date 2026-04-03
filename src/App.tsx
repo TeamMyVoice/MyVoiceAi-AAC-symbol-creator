@@ -140,6 +140,14 @@ export default function App() {
     setLang(prev => prev === 'en' ? 'he' : 'en');
   };
 
+  // When embedded as an iframe in the main app, send the preview image to the parent
+  const isEmbedded = window.self !== window.top;
+  const handleSaveToParent = () => {
+    if (previewImage) {
+      window.parent.postMessage({ imageDataUrl: previewImage }, '*');
+    }
+  };
+
   return (
     <div className={`min-h-screen bg-gray-50 text-gray-900 font-sans ${lang === 'he' ? 'rtl' : 'ltr'}`} dir={lang === 'he' ? 'rtl' : 'ltr'}>
       {/* Header */}
@@ -159,7 +167,15 @@ export default function App() {
             </div>
 
             <div className="flex items-center justify-end gap-4 w-1/3">
-              <button 
+              {isEmbedded && previewImage && (
+                <button
+                  onClick={handleSaveToParent}
+                  className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-purple-600 hover:bg-purple-500 text-white text-sm font-semibold transition-colors"
+                >
+                  {lang === 'he' ? 'שמור דמות ✓' : 'Save Character ✓'}
+                </button>
+              )}
+              <button
                 onClick={toggleLanguage}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm font-medium transition-colors"
               >
