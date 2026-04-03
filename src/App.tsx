@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef } from 'react';
 import { Customizer } from './components/Customizer';
 import { IconGrid } from './components/IconGrid';
 import { CharacterAttributes, GeneratedIcon } from './types';
@@ -100,6 +100,51 @@ export default function App() {
   const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
+  // ── Embedding (postMessage) ────────────────────────────────────────────────
+  const isEmbedded = window.self !== window.top;
+
+  // Refs keep event-handler closures up-to-date without re-registering
+  const iconsRef        = useRef<GeneratedIcon[]>([]);
+  const previewImageRef = useRef<string | null>(null);
+  const attributesRef   = useRef(attributes);
+
+  useEffect(() => { iconsRef.current        = icons;        }, [icons]);
+  useEffect(() => { previewImageRef.current = previewImage; }, [previewImage]);
+  useEffect(() => { attributesRef.current   = attributes;   }, [attributes]);
+
+  const sendToParent = () => {
+    const currentIcons = iconsRef.current;
+    const imgSrc = previewImageRef.current ?? currentIcons.find(i => i.imageUrl)?.imageUrl ?? null;
+    if (!imgSrc) return;
+    const iconMap: Record<string, string> = {};
+    currentIcons.forEach(icon => { if (icon.imageUrl) iconMap[icon.actionId] = icon.imageUrl; });
+    const attrs = attributesRef.current;
+    window.parent.postMessage({
+      imageDataUrl: imgSrc,
+      iconMap,
+      attributes: {
+        gender:      attrs.gender,
+        age:         attrs.age,
+        skinColor:   attrs.skinColor,
+        hairColor:   attrs.hairColor || '',
+        hairLength:  attrs.hairLength,
+        eyeColor:    attrs.eyeColor,
+        clothesColor: attrs.clothesColor,
+        bodySize:    attrs.bodySize,
+      },
+    }, '*');
+  };
+
+  // Listen for REQUEST_SAVE from the parent (MyVoice onboarding)
+  useEffect(() => {
+    if (!isEmbedded) return;
+    const handler = (e: MessageEvent) => {
+      if (e.data?.type === 'REQUEST_SAVE') sendToParent();
+    };
+    window.addEventListener('message', handler);
+    return () => window.removeEventListener('message', handler);
+  }, []); // eslint-disable-line react-hooks/exhaustive-deps
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -175,17 +220,19 @@ export default function App() {
   }, [attributes, hasApiKey]);
 
   const handleGenerateAll = async () => {
-    if (!user) {
+    if (!user && !isEmbedded) {
       alert(lang === 'en' ? 'Please sign in to generate and save characters.' : 'אנא התחבר כדי ליצור ולשמור דמויות.');
       return;
     }
 
     setIsGenerating(true);
-    
+
     const hash = getAttributesHash(attributes);
     const docRef = doc(db, 'character_boards', hash);
     let existingIcons: Record<string, string> = {};
 
+    // Only fetch from Firestore when signed in
+    if (user) {
     try {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
@@ -193,6 +240,7 @@ export default function App() {
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, `character_boards/${hash}`);
+    }
     }
 
     // Initialize the grid with loading states or existing icons
@@ -238,8 +286,8 @@ export default function App() {
       }
     }
     
-    // Save newly generated icons to DB
-    if (Object.keys(newlyGeneratedIcons).length > 0) {
+    // Save newly generated icons to DB (only when signed in)
+    if (user && Object.keys(newlyGeneratedIcons).length > 0) {
       try {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -258,6 +306,29 @@ export default function App() {
         }
       } catch (error) {
         handleFirestoreError(error, OperationType.WRITE, `character_boards/${hash}`);
+      }
+    }
+
+    // Auto-send completed icons to parent (MyVoice onboarding)
+    if (isEmbedded) {
+      const allIconMap = { ...existingIcons, ...newlyGeneratedIcons };
+      const imgSrc = previewImageRef.current ?? Object.values(allIconMap)[0] ?? null;
+      if (imgSrc) {
+        const attrs = attributesRef.current;
+        window.parent.postMessage({
+          imageDataUrl: imgSrc,
+          iconMap: allIconMap,
+          attributes: {
+            gender:       attrs.gender,
+            age:          attrs.age,
+            skinColor:    attrs.skinColor,
+            hairColor:    attrs.hairColor || '',
+            hairLength:   attrs.hairLength,
+            eyeColor:     attrs.eyeColor,
+            clothesColor: attrs.clothesColor,
+            bodySize:     attrs.bodySize,
+          },
+        }, '*');
       }
     }
 
@@ -416,7 +487,15 @@ export default function App() {
             </div>
 
             <div className="flex items-center justify-end gap-4 w-1/3">
-              <button 
+              {isEmbedded && icons.some(i => i.imageUrl) && (
+                <button
+                  onClick={sendToParent}
+                  className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm font-semibold transition-colors"
+                >
+                  ✓ {lang === 'en' ? 'Save Character' : 'שמור דמות'}
+                </button>
+              )}
+              <button
                 onClick={toggleLanguage}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm font-medium transition-colors"
               >
@@ -449,11 +528,11 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!user && (
+        {!user && !isEmbedded && (
           <div className="mb-8 bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
             <p className="text-purple-800 font-medium">
-              {lang === 'en' 
-                ? 'Please sign in to generate, save, and access community characters from the database.' 
+              {lang === 'en'
+                ? 'Please sign in to generate, save, and access community characters from the database.'
                 : 'אנא התחבר כדי ליצור, לשמור ולגשת לדמויות קהילה ממאגר הנתונים.'}
             </p>
           </div>
