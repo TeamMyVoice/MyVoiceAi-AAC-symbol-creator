@@ -140,11 +140,15 @@ export default function App() {
     setLang(prev => prev === 'en' ? 'he' : 'en');
   };
 
-  // When embedded as an iframe in the main app, send the preview image to the parent
+  // When embedded as an iframe in the main app, send the preview image + all icons to the parent
   const isEmbedded = window.self !== window.top;
   const handleSaveToParent = () => {
     if (previewImage) {
-      window.parent.postMessage({ imageDataUrl: previewImage }, '*');
+      const iconMap: Record<string, string> = {};
+      icons.forEach(icon => {
+        if (icon.imageUrl) iconMap[icon.actionId] = icon.imageUrl;
+      });
+      window.parent.postMessage({ imageDataUrl: previewImage, iconMap }, '*');
     }
   };
 
