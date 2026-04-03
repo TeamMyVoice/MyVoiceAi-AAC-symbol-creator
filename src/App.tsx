@@ -151,7 +151,7 @@ export default function App() {
     icons.forEach(icon => {
       if (icon.imageUrl) iconMap[icon.actionId] = icon.imageUrl;
     });
-    window.parent.postMessage({ imageDataUrl: imgSrc, iconMap }, '*');
+    window.parent.postMessage({ imageDataUrl: imgSrc, iconMap, attributes }, '*');
   };
 
   const handleSaveToParent = buildAndSendToParent;
