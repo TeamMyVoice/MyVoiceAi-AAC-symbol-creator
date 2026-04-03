@@ -168,6 +168,21 @@ export default function App() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [isGenerating]);
 
+  // Respond to REQUEST_SAVE from the parent (sent when user clicks "סיום")
+  useEffect(() => {
+    const imgSrc = previewImage ?? icons.find(i => i.imageUrl)?.imageUrl ?? null;
+    const iconMap: Record<string, string> = {};
+    icons.forEach(icon => { if (icon.imageUrl) iconMap[icon.actionId] = icon.imageUrl; });
+
+    function handleRequest(e: MessageEvent) {
+      if (e.data?.type !== 'REQUEST_SAVE') return;
+      if (!imgSrc) return;
+      window.parent.postMessage({ imageDataUrl: imgSrc, iconMap, attributes }, '*');
+    }
+    window.addEventListener('message', handleRequest);
+    return () => window.removeEventListener('message', handleRequest);
+  }, [previewImage, icons, attributes]);
+
   return (
     <div className={`min-h-screen bg-gray-50 text-gray-900 font-sans ${lang === 'he' ? 'rtl' : 'ltr'}`} dir={lang === 'he' ? 'rtl' : 'ltr'}>
       {/* Header */}
