@@ -12,10 +12,10 @@ export async function generateIconImage(attributes: CharacterAttributes, action:
   
   const hairDesc = attributes.hairLength === 'Bald' ? 'bald head' : `${attributes.hairLength} ${attributes.hairColor} hair`;
   
-  const prompt = `A high-quality AAC symbol icon of a ${attributes.age} ${attributes.gender} with a ${attributes.bodySize.toLowerCase()} body type, ${attributes.skinColor} skin, ${hairDesc}, ${attributes.eyeColor} eyes, wearing a ${attributes.clothesColor} shirt. The character is ${action}. Style of minimalistic flat vector illustration style, thick clean outlines, simple solid colors, centered on a plain white background, isolated, professional clinical look, no shading or gradients, high contrast, symbol stix style.`;
+  const prompt = `A high-quality AAC symbol icon of a ${attributes.age} ${attributes.gender} with a ${attributes.bodySize.toLowerCase()} body type, ${attributes.skinColor} skin, ${hairDesc}, ${attributes.eyeColor} eyes, wearing a ${attributes.clothesColor} shirt. The character is ${action}. Mid-shot and up (showing head, shoulders, and torso). Style of minimalistic flat vector illustration style, thick clean outlines, simple solid colors, centered on a plain white background, isolated, professional clinical look, no shading or gradients, high contrast, symbol stix style.`;
 
   const response = await ai.models.generateContent({
-    model: 'gemini-3.1-flash-image-preview',
+    model: 'gemini-2.5-flash-image',
     contents: {
       parts: [
         {
@@ -23,12 +23,6 @@ export async function generateIconImage(attributes: CharacterAttributes, action:
         },
       ],
     },
-    config: {
-      imageConfig: {
-        aspectRatio: "1:1",
-        imageSize: "1K"
-      }
-    }
   });
 
   if (!response.candidates || response.candidates.length === 0) {

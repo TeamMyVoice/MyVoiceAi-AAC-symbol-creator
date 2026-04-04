@@ -1,25 +1,16 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Customizer } from './components/Customizer';
 import { IconGrid } from './components/IconGrid';
 import { CharacterAttributes, GeneratedIcon } from './types';
 import { AAC_ACTIONS } from './constants';
 import { generateIconImage } from './services/ai';
-import { MessageSquare, Globe, Download, LogIn, LogOut, Key } from 'lucide-react';
+import { MessageSquare, Globe, Download, LogIn, LogOut } from 'lucide-react';
 import { translations, translateOption } from './translations';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
 import { auth, db, signInWithGoogle, logOut } from './firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
-
-declare global {
-  interface Window {
-    aistudio?: {
-      hasSelectedApiKey: () => Promise<boolean>;
-      openSelectKey: () => Promise<void>;
-    };
-  }
-}
 
 export type Language = 'en' | 'he';
 
@@ -73,13 +64,35 @@ const getAttributesHash = (attrs: CharacterAttributes) => {
   return `${attrs.gender}_${attrs.age}_${attrs.skinColor}_${attrs.hairLength}_${attrs.hairColor || 'none'}_${attrs.eyeColor}_${attrs.clothesColor}_${attrs.bodySize}`.replace(/[^a-zA-Z0-9]/g, '');
 };
 
+const PRESETS = [
+  {
+    labelEn: 'Boy (Brown Hair)',
+    labelHe: 'בן (שיער חום)',
+    attributes: { gender: 'Male', age: 'Child', skinColor: 'Medium Light', hairColor: 'Brown', hairLength: 'Short', eyeColor: 'Brown', clothesColor: 'Blue', bodySize: 'Average' }
+  },
+  {
+    labelEn: 'Boy (Blonde Hair)',
+    labelHe: 'בן (שיער בלונדיני)',
+    attributes: { gender: 'Male', age: 'Child', skinColor: 'Medium Light', hairColor: 'Blonde', hairLength: 'Short', eyeColor: 'Blue', clothesColor: 'Blue', bodySize: 'Average' }
+  },
+  {
+    labelEn: 'Girl (Brown Hair)',
+    labelHe: 'בת (שיער חום)',
+    attributes: { gender: 'Female', age: 'Child', skinColor: 'Medium Light', hairColor: 'Brown', hairLength: 'Long', eyeColor: 'Brown', clothesColor: 'Blue', bodySize: 'Average' }
+  },
+  {
+    labelEn: 'Girl (Blonde Hair)',
+    labelHe: 'בת (שיער בלונדיני)',
+    attributes: { gender: 'Female', age: 'Child', skinColor: 'Medium Light', hairColor: 'Blonde', hairLength: 'Long', eyeColor: 'Blue', clothesColor: 'Blue', bodySize: 'Average' }
+  }
+];
+
 export default function App() {
   const [lang, setLang] = useState<Language>('en');
   const t = translations[lang];
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
   const [isAuthReady, setIsAuthReady] = useState(false);
-  const [hasApiKey, setHasApiKey] = useState<boolean | null>(null);
 
   const [attributes, setAttributes] = useState<CharacterAttributes>({
     gender: 'Male',
@@ -100,51 +113,6 @@ export default function App() {
   const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
 
-  // ── Embedding (postMessage) ────────────────────────────────────────────────
-  const isEmbedded = window.self !== window.top;
-
-  // Refs keep event-handler closures up-to-date without re-registering
-  const iconsRef        = useRef<GeneratedIcon[]>([]);
-  const previewImageRef = useRef<string | null>(null);
-  const attributesRef   = useRef(attributes);
-
-  useEffect(() => { iconsRef.current        = icons;        }, [icons]);
-  useEffect(() => { previewImageRef.current = previewImage; }, [previewImage]);
-  useEffect(() => { attributesRef.current   = attributes;   }, [attributes]);
-
-  const sendToParent = () => {
-    const currentIcons = iconsRef.current;
-    const imgSrc = previewImageRef.current ?? currentIcons.find(i => i.imageUrl)?.imageUrl ?? null;
-    if (!imgSrc) return;
-    const iconMap: Record<string, string> = {};
-    currentIcons.forEach(icon => { if (icon.imageUrl) iconMap[icon.actionId] = icon.imageUrl; });
-    const attrs = attributesRef.current;
-    window.parent.postMessage({
-      imageDataUrl: imgSrc,
-      iconMap,
-      attributes: {
-        gender:      attrs.gender,
-        age:         attrs.age,
-        skinColor:   attrs.skinColor,
-        hairColor:   attrs.hairColor || '',
-        hairLength:  attrs.hairLength,
-        eyeColor:    attrs.eyeColor,
-        clothesColor: attrs.clothesColor,
-        bodySize:    attrs.bodySize,
-      },
-    }, '*');
-  };
-
-  // Listen for REQUEST_SAVE from the parent (MyVoice onboarding)
-  useEffect(() => {
-    if (!isEmbedded) return;
-    const handler = (e: MessageEvent) => {
-      if (e.data?.type === 'REQUEST_SAVE') sendToParent();
-    };
-    window.addEventListener('message', handler);
-    return () => window.removeEventListener('message', handler);
-  }, []); // eslint-disable-line react-hooks/exhaustive-deps
-
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
@@ -152,29 +120,6 @@ export default function App() {
     });
     return () => unsubscribe();
   }, []);
-
-  useEffect(() => {
-    const checkApiKey = async () => {
-      if (window.aistudio && window.aistudio.hasSelectedApiKey) {
-        const hasKey = await window.aistudio.hasSelectedApiKey();
-        setHasApiKey(hasKey);
-      } else {
-        setHasApiKey(true); // Fallback if not in AI Studio
-      }
-    };
-    checkApiKey();
-  }, []);
-
-  const handleSelectApiKey = async () => {
-    if (window.aistudio && window.aistudio.openSelectKey) {
-      try {
-        await window.aistudio.openSelectKey();
-        setHasApiKey(true); // Assume success to mitigate race condition
-      } catch (error) {
-        console.error("Failed to select API key", error);
-      }
-    }
-  };
 
   const generatePreview = async () => {
     const cacheKey = JSON.stringify(attributes);
@@ -192,10 +137,7 @@ export default function App() {
       setPreviewCache(prev => ({ ...prev, [cacheKey]: imageUrl }));
     } catch (error: any) {
       console.error('Failed to generate preview:', error);
-      if (error?.message?.includes('Requested entity was not found.')) {
-        setHasApiKey(false);
-        setPreviewError("API Key error. Please select a valid key.");
-      } else if (error?.message?.includes('429') || error?.message?.includes('quota') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
+      if (error?.message?.includes('429') || error?.message?.includes('quota') || error?.message?.includes('RESOURCE_EXHAUSTED')) {
         setPreviewError(t.rateLimit);
       } else {
         setPreviewError(t.previewError);
@@ -208,31 +150,27 @@ export default function App() {
   // Auto-update preview when attributes change (debounced)
   useEffect(() => {
     const timeoutId = setTimeout(() => {
-      if (hasApiKey) {
-        generatePreview();
-      }
+      generatePreview();
     }, 1500); // 1.5s debounce
 
     return () => {
       clearTimeout(timeoutId);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [attributes, hasApiKey]);
+  }, [attributes]);
 
-  const handleGenerateAll = async () => {
-    if (!user && !isEmbedded) {
+  const generateBoard = async (targetAttributes: CharacterAttributes) => {
+    if (!user) {
       alert(lang === 'en' ? 'Please sign in to generate and save characters.' : 'אנא התחבר כדי ליצור ולשמור דמויות.');
       return;
     }
 
     setIsGenerating(true);
-
-    const hash = getAttributesHash(attributes);
+    
+    const hash = getAttributesHash(targetAttributes);
     const docRef = doc(db, 'character_boards', hash);
     let existingIcons: Record<string, string> = {};
 
-    // Only fetch from Firestore when signed in
-    if (user) {
     try {
       const docSnap = await getDoc(docRef);
       if (docSnap.exists()) {
@@ -240,7 +178,6 @@ export default function App() {
       }
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, `character_boards/${hash}`);
-    }
     }
 
     // Initialize the grid with loading states or existing icons
@@ -263,20 +200,20 @@ export default function App() {
       if (existingIcons[action.id]) continue; // Skip if already in DB
 
       try {
-        const imageUrl = await generateIconImage(attributes, action.action);
+        const imageUrl = await generateIconImage(targetAttributes, action.action);
         newlyGeneratedIcons[action.id] = imageUrl;
         setIcons(prev => prev.map(icon => 
           icon.actionId === action.id 
             ? { ...icon, imageUrl, isLoading: false } 
             : icon
         ));
+        
+        // Add a 4.2s delay between requests to respect the 15 RPM free tier limit
+        if (i < AAC_ACTIONS.length - 1) {
+          await new Promise(resolve => setTimeout(resolve, 4200));
+        }
       } catch (error: any) {
         console.error(`Failed to generate icon for ${action.label}:`, error);
-        if (error?.message?.includes('Requested entity was not found.')) {
-          setHasApiKey(false);
-          setIsGenerating(false);
-          return;
-        }
         const errorMsg = error?.message?.includes('429') ? t.rateLimit : t.previewError;
         setIcons(prev => prev.map(icon => 
           icon.actionId === action.id 
@@ -286,8 +223,8 @@ export default function App() {
       }
     }
     
-    // Save newly generated icons to DB (only when signed in)
-    if (user && Object.keys(newlyGeneratedIcons).length > 0) {
+    // Save newly generated icons to DB
+    if (Object.keys(newlyGeneratedIcons).length > 0) {
       try {
         const docSnap = await getDoc(docRef);
         if (docSnap.exists()) {
@@ -298,7 +235,7 @@ export default function App() {
         } else {
           await setDoc(docRef, {
             attributesHash: hash,
-            attributes,
+            attributes: targetAttributes,
             icons: newlyGeneratedIcons,
             createdAt: serverTimestamp(),
             updatedAt: serverTimestamp()
@@ -309,31 +246,38 @@ export default function App() {
       }
     }
 
-    // Auto-send completed icons to parent (MyVoice onboarding)
-    if (isEmbedded) {
-      const allIconMap = { ...existingIcons, ...newlyGeneratedIcons };
-      const imgSrc = previewImageRef.current ?? Object.values(allIconMap)[0] ?? null;
-      if (imgSrc) {
-        const attrs = attributesRef.current;
-        window.parent.postMessage({
-          imageDataUrl: imgSrc,
-          iconMap: allIconMap,
-          attributes: {
-            gender:       attrs.gender,
-            age:          attrs.age,
-            skinColor:    attrs.skinColor,
-            hairColor:    attrs.hairColor || '',
-            hairLength:   attrs.hairLength,
-            eyeColor:     attrs.eyeColor,
-            clothesColor: attrs.clothesColor,
-            bodySize:     attrs.bodySize,
-          },
-        }, '*');
-      }
-    }
-
     setIsGenerating(false);
   };
+
+  const handleLoadPreset = async (preset: typeof PRESETS[0]) => {
+    setAttributes(preset.attributes as CharacterAttributes);
+    
+    const hash = getAttributesHash(preset.attributes as CharacterAttributes);
+    const docRef = doc(db, 'character_boards', hash);
+    let existingIcons: Record<string, string> = {};
+    
+    try {
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        existingIcons = docSnap.data().icons || {};
+      }
+    } catch (error) {
+      console.error("Failed to fetch preset from DB", error);
+    }
+
+    const newIcons: GeneratedIcon[] = AAC_ACTIONS.map(action => ({
+      id: `${action.id}-${Date.now()}`,
+      actionId: action.id,
+      label: action.label,
+      imageUrl: existingIcons[action.id] || null,
+      isLoading: false,
+      error: null,
+    }));
+    
+    setIcons(newIcons);
+  };
+
+  const handleGenerateAll = () => generateBoard(attributes);
 
   const handleRegenerateSingle = async (actionId: string) => {
     if (!user) {
@@ -379,11 +323,6 @@ export default function App() {
       }
     } catch (error: any) {
       console.error(`Failed to regenerate icon for ${action.label}:`, error);
-      if (error?.message?.includes('Requested entity was not found.')) {
-        setHasApiKey(false);
-        alert(lang === 'en' ? "API Key error. Please select a valid key." : "שגיאת מפתח API. אנא בחר מפתח תקין.");
-        return;
-      }
       const errorMsg = error?.message?.includes('429') ? t.rateLimit : t.previewError;
       setIcons(prev => prev.map(icon => 
         icon.actionId === actionId 
@@ -431,40 +370,7 @@ export default function App() {
 
   const completedIconsCount = icons.filter(icon => icon.imageUrl && !icon.isLoading && !icon.error).length;
 
-  if (hasApiKey === false) {
-    return (
-      <div className={`min-h-screen flex items-center justify-center bg-gray-50 p-4 font-sans ${lang === 'he' ? 'rtl' : 'ltr'}`} dir={lang === 'he' ? 'rtl' : 'ltr'}>
-        <div className="max-w-md w-full bg-white rounded-xl shadow-sm border border-gray-200 p-8 text-center">
-          <div className="mb-6 mx-auto w-12 h-12 bg-purple-100 text-purple-600 rounded-full flex items-center justify-center">
-            <Key className="w-6 h-6" />
-          </div>
-          <h2 className="text-2xl font-bold text-gray-900 mb-2">
-            {lang === 'en' ? 'API Key Required' : 'נדרש מפתח API'}
-          </h2>
-          <p className="text-gray-600 mb-6">
-            {lang === 'en' 
-              ? 'To use the high-quality Gemini 3.1 Flash Image model and bypass default rate limits, you must select your own paid Google Cloud API key.'
-              : 'כדי להשתמש במודל האיכותי Gemini 3.1 Flash Image ולעקוף את מגבלות הקצב, עליך לבחור מפתח API משלך מ-Google Cloud.'}
-          </p>
-          <p className="text-sm text-gray-500 mb-8">
-            {lang === 'en' ? 'For billing details, visit the ' : 'לפרטי חיוב, בקר ב'}
-            <a href="https://ai.google.dev/gemini-api/docs/billing" target="_blank" rel="noreferrer" className="text-purple-600 hover:underline">
-              {lang === 'en' ? 'billing documentation' : 'תיעוד החיוב'}
-            </a>.
-          </p>
-          <button
-            onClick={handleSelectApiKey}
-            className="w-full flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-4 py-3 text-sm font-semibold text-white shadow-sm hover:bg-purple-500 transition-colors"
-          >
-            <Key className="w-4 h-4" />
-            {lang === 'en' ? 'Select API Key' : 'בחר מפתח API'}
-          </button>
-        </div>
-      </div>
-    );
-  }
-
-  if (!isAuthReady || hasApiKey === null) {
+  if (!isAuthReady) {
     return <div className="min-h-screen flex items-center justify-center bg-gray-50"><div className="animate-spin rounded-full h-8 w-8 border-b-2 border-purple-600"></div></div>;
   }
 
@@ -487,15 +393,7 @@ export default function App() {
             </div>
 
             <div className="flex items-center justify-end gap-4 w-1/3">
-              {isEmbedded && icons.some(i => i.imageUrl) && (
-                <button
-                  onClick={sendToParent}
-                  className="flex items-center gap-2 px-4 py-1.5 rounded-md bg-green-600 text-white hover:bg-green-700 text-sm font-semibold transition-colors"
-                >
-                  ✓ {lang === 'en' ? 'Save Character' : 'שמור דמות'}
-                </button>
-              )}
-              <button
+              <button 
                 onClick={toggleLanguage}
                 className="flex items-center gap-2 px-3 py-1.5 rounded-md bg-gray-100 hover:bg-gray-200 text-sm font-medium transition-colors"
               >
@@ -528,11 +426,11 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {!user && !isEmbedded && (
+        {!user && (
           <div className="mb-8 bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
             <p className="text-purple-800 font-medium">
-              {lang === 'en'
-                ? 'Please sign in to generate, save, and access community characters from the database.'
+              {lang === 'en' 
+                ? 'Please sign in to generate, save, and access community characters from the database.' 
                 : 'אנא התחבר כדי ליצור, לשמור ולגשת לדמויות קהילה ממאגר הנתונים.'}
             </p>
           </div>
@@ -542,6 +440,23 @@ export default function App() {
           {/* Sidebar */}
           <div className="w-full lg:w-80 flex-shrink-0">
             <div className="sticky top-24">
+              <div className="mb-6 bg-white p-5 rounded-xl border border-gray-200 shadow-sm">
+                <h3 className="text-sm font-bold text-gray-900 mb-3 uppercase tracking-wider">
+                  {lang === 'en' ? 'Basic Characters' : 'דמויות בסיסיות'}
+                </h3>
+                <div className="flex flex-col gap-2">
+                  {PRESETS.map((preset, idx) => (
+                    <button
+                      key={idx}
+                      onClick={() => handleLoadPreset(preset)}
+                      className="text-left px-4 py-2.5 text-sm rounded-lg bg-blue-50 text-blue-700 hover:bg-blue-100 font-semibold transition-colors border border-blue-100"
+                    >
+                      {lang === 'en' ? preset.labelEn : preset.labelHe}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
               <Customizer 
                 attributes={attributes} 
                 onChange={setAttributes} 
@@ -570,10 +485,10 @@ export default function App() {
                 <button
                   onClick={handleDownloadAll}
                   disabled={isDownloadingAll}
-                  className="flex items-center justify-center gap-2 rounded-lg bg-white border border-gray-200 px-4 py-2 text-sm font-semibold text-gray-900 shadow-sm hover:bg-gray-50 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 disabled:opacity-50 transition-colors whitespace-nowrap"
+                  className="flex items-center justify-center gap-2 rounded-lg bg-purple-600 px-6 py-2.5 text-sm font-bold text-white shadow-sm hover:bg-purple-500 focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-purple-600 disabled:opacity-50 transition-colors whitespace-nowrap"
                 >
                   <Download className={`h-4 w-4 ${isDownloadingAll ? 'animate-bounce' : ''}`} />
-                  {isDownloadingAll ? t.updating : t.downloadAll}
+                  {isDownloadingAll ? t.updating : (lang === 'en' ? 'Choose & Download Packet' : 'בחר והורד חבילה')}
                 </button>
               )}
             </div>
