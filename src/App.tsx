@@ -8,7 +8,7 @@ import { MessageSquare, Globe, Download, LogIn, LogOut } from 'lucide-react';
 import { translations, translateOption } from './translations';
 import JSZip from 'jszip';
 import { saveAs } from 'file-saver';
-import { auth, db, signInWithGoogle, logOut } from './firebase';
+import { auth, db, signInWithGoogle, logOut, ensureAnonymousAuth } from './firebase';
 import { onAuthStateChanged, User as FirebaseUser } from 'firebase/auth';
 import { doc, getDoc, setDoc, updateDoc, serverTimestamp } from 'firebase/firestore';
 
@@ -88,7 +88,12 @@ const PRESETS = [
 ];
 
 export default function App() {
-  const [lang, setLang] = useState<Language>('en');
+  const [lang, setLang] = useState<Language>(() => {
+    // The embedding platform passes ?lang=he|en so the creator opens in the
+    // user's language (it has full translations but otherwise defaults to English).
+    const urlLang = new URLSearchParams(window.location.search).get('lang');
+    return urlLang === 'he' ? 'he' : 'en';
+  });
   const t = translations[lang];
 
   const [user, setUser] = useState<FirebaseUser | null>(null);
@@ -112,6 +117,7 @@ export default function App() {
   const [previewError, setPreviewError] = useState<string | null>(null);
   const [previewCache, setPreviewCache] = useState<Record<string, string>>({});
   const [isDownloadingAll, setIsDownloadingAll] = useState(false);
+  const [cacheNotice, setCacheNotice] = useState<string | null>(null);
 
   // ── Embedding (postMessage) ────────────────────────────────────────────────
   const isEmbedded = window.self !== window.top;
@@ -161,6 +167,12 @@ export default function App() {
     const unsubscribe = onAuthStateChanged(auth, (currentUser) => {
       setUser(currentUser);
       setIsAuthReady(true);
+      // Embedded in the MyVoice platform → the user is already authenticated there.
+      // Sign in anonymously (no popup) so the shared character cache is reachable
+      // without forcing a second Google login.
+      if (!currentUser && isEmbedded) {
+        void ensureAnonymousAuth();
+      }
     });
     return () => unsubscribe();
   }, []);
@@ -224,6 +236,15 @@ export default function App() {
     } catch (error) {
       handleFirestoreError(error, OperationType.GET, `character_boards/${hash}`);
     }
+
+    // If the whole character is already in the shared library, it loads instantly
+    // and costs no AI credits — tell the user so they know reuse is free.
+    const allCached = AAC_ACTIONS.length > 0 && AAC_ACTIONS.every(a => existingIcons[a.id]);
+    setCacheNotice(allCached
+      ? (lang === 'en'
+          ? 'This character already exists — loaded from the library, no credits used.'
+          : 'הדמות הזו כבר קיימת — נטענה מהמאגר, ללא ניצול קרדיטים.')
+      : null);
 
     // Initialize the grid with loading states or existing icons
     const initialIcons: GeneratedIcon[] = AAC_ACTIONS.map(action => ({
@@ -476,8 +497,8 @@ export default function App() {
                 <span className="hidden sm:inline">{lang === 'en' ? 'עברית' : 'English'}</span>
               </button>
               
-              {user ? (
-                <button 
+              {!isEmbedded && (user ? (
+                <button
                   onClick={logOut}
                   className="flex items-center gap-2 px-3 py-1.5 rounded-md text-gray-600 hover:bg-gray-100 text-sm font-medium transition-colors"
                   title="Sign Out"
@@ -493,7 +514,7 @@ export default function App() {
                   <LogIn className="h-4 w-4" />
                   <span className="hidden sm:inline">{lang === 'en' ? 'Sign In' : 'התחבר'}</span>
                 </button>
-              )}
+              ))}
             </div>
           </div>
         </div>
@@ -501,6 +522,11 @@ export default function App() {
 
       {/* Main Content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        {cacheNotice && (
+          <div className="mb-6 bg-green-50 border border-green-200 rounded-xl p-3 text-center">
+            <p className="text-green-800 font-medium text-sm">{cacheNotice}</p>
+          </div>
+        )}
         {!user && !isEmbedded && (
           <div className="mb-8 bg-purple-50 border border-purple-200 rounded-xl p-4 text-center">
             <p className="text-purple-800 font-medium">
