@@ -4,7 +4,7 @@ export const SKIN_COLORS = ['Light', 'Medium Light', 'Medium', 'Medium Dark', 'D
 export const HAIR_COLORS = ['Brown', 'Black', 'Blonde', 'Gray'];
 export const HAIR_LENGTHS = ['Bald', 'Short', 'Medium', 'Long'];
 export const EYE_COLORS = ['Blue', 'Brown', 'Green'];
-export const CLOTHES_COLORS = ['Blue', 'Yellow', 'Red', 'Gray', 'Pink', 'Orange'];
+export const CLOTHES_COLORS = ['Blue', 'Yellow', 'Red', 'Gray', 'Pink', 'Orange', 'Purple'];
 
 export const BODY_SIZES = ['Slim', 'Average', 'Chubby', 'Plus Size'];
 

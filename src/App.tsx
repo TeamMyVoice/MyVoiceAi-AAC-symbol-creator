@@ -78,7 +78,7 @@ const PRESETS = [
   {
     labelEn: 'Girl (Brown Hair)',
     labelHe: 'בת (שיער חום)',
-    attributes: { gender: 'Female', age: 'Child', skinColor: 'Medium Light', hairColor: 'Brown', hairLength: 'Long', eyeColor: 'Brown', clothesColor: 'Blue', bodySize: 'Average' }
+    attributes: { gender: 'Female', age: 'Child', skinColor: 'Medium Light', hairColor: 'Brown', hairLength: 'Long', eyeColor: 'Brown', clothesColor: 'Purple', bodySize: 'Average' }
   },
   {
     labelEn: 'Girl (Blonde Hair)',
